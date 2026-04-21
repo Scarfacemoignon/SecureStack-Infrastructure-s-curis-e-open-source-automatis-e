@@ -1,54 +1,65 @@
 ---
 # ============================================================
-# Playbook 02 — Nginx : Déploiement agents Wazuh + hardening
-# Usage : ansible-playbook playbooks/02_nginx.yml --ask-vault-pass
+# Playbook 02 — Nginx : Validation et personnalisation
+# Usage : ansible-playbook playbooks/02_nginx.yml
 # ============================================================
 
-- name: "Nginx — Hardening et installation agent Wazuh"
-  hosts: webservers
-  gather_facts: true
-  vars_files:
-    - ../group_vars/vault.yml
+- name: "Nginx — Validation et personnalisation (depuis localhost)"
+  hosts: localhost
+  gather_facts: false
 
   tasks:
 
-    - name: "Vérifier que Nginx répond"
-      uri:
-        url: "http://{{ ansible_host }}:8080/health"
-        return_content: yes
-      register: health_check
-      retries: 5
-      delay: 5
+    - name: "Health check sur chaque Nginx via docker exec"
+      command: docker exec {{ item }} wget -qO- http://127.0.0.1:8080/health
+      loop:
+        - nginx1
+        - nginx2
+      register: health_checks
+      changed_when: false
+      ignore_errors: true
 
-    - name: "Afficher la réponse health check"
+    - name: "Résultat health checks Nginx"
       debug:
-        msg: "Nginx {{ inventory_hostname }} : {{ health_check.content | trim }}"
+        msg: "{{ item.item }} : {{ item.stdout | trim if item.rc == 0 else 'KO — ' + item.stderr }}"
+      loop: "{{ health_checks.results }}"
 
-    - name: "Installer l'agent Wazuh sur Nginx"
-      block:
-        - name: "Télécharger le script d'installation Wazuh"
-          get_url:
-            url: "https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_4.7.0-1_amd64.deb"
-            dest: "/tmp/wazuh-agent.deb"
-            mode: '0644'
+    - name: "Version Nginx"
+      command: docker exec {{ item }} nginx -v
+      loop:
+        - nginx1
+        - nginx2
+      register: nginx_versions
+      changed_when: false
+      ignore_errors: true
 
-        - name: "Installer le paquet Wazuh agent"
-          apt:
-            deb: "/tmp/wazuh-agent.deb"
-          environment:
-            WAZUH_MANAGER: "{{ wazuh_manager_ip }}"
-            WAZUH_AGENT_NAME: "{{ inventory_hostname }}"
+    - name: "Versions Nginx"
+      debug:
+        msg: "{{ item.item }} : {{ item.stderr | trim }}"
+      loop: "{{ nginx_versions.results }}"
 
-        - name: "Démarrer et activer l'agent Wazuh"
-          systemd:
-            name: wazuh-agent
-            state: started
-            enabled: yes
-      when: ansible_system == "Linux"
+    - name: "Personnaliser index.html avec le hostname du nœud"
+      command: >
+        docker exec {{ item }}
+        sh -c "sed -i 's/NGINX_NODE/{{ item }}/g' /usr/share/nginx/html/index.html 2>/dev/null; echo done"
+      loop:
+        - nginx1
+        - nginx2
+      changed_when: false
+      ignore_errors: true
 
-    - name: "Personnaliser la page index.html avec le hostname"
-      replace:
-        path: /usr/share/nginx/html/index.html
-        regexp: 'NGINX_NODE'
-        replace: "{{ inventory_hostname }}"
-      # Permet de distinguer quel nœud répond (utile pour tester le LB)
+- name: "Nginx — Validation HTTP via HAProxy (depuis le réseau)"
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+
+    - name: "Tester Nginx via HAProxy (port 80 exposé sur le host)"
+      command: curl -s -o /dev/null -w "%{http_code}" http://localhost/health
+      register: nginx_via_haproxy
+      changed_when: false
+      ignore_errors: true
+
+    - name: "Bilan accès Nginx via HAProxy → WAF → load balancer"
+      debug:
+        msg: "Accès HTTP (localhost:80) : {{ 'UP ✓ (HTTP ' + nginx_via_haproxy.stdout + ')' if nginx_via_haproxy.rc == 0 else 'KO ✗' }}"

@@ -20,4 +20,4 @@ COPY suricata.yaml /etc/suricata/suricata.yaml
 # Logs EVE JSON (consommés par Wazuh)
 VOLUME ["/var/log/suricata"]
 
-CMD ["suricata", "-c", "/etc/suricata/suricata.yaml", "--af-packet"]
+CMD ["suricata", "-c", "/etc/suricata/suricata.yaml", "-i", "any"]

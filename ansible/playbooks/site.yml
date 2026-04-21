@@ -1,0 +1,23 @@
+---
+# ============================================================
+# Playbook maître — Validation complète de l'infrastructure
+# Usage : ansible-playbook playbooks/site.yml
+# ============================================================
+
+- name: "01 — Réplication MariaDB"
+  import_playbook: 01_mariadb.yml
+
+- name: "02 — Nginx health check"
+  import_playbook: 02_nginx.yml
+
+- name: "03 — HAProxy + Keepalived"
+  import_playbook: 03_haproxy.yml
+
+- name: "04 — WAF ModSecurity"
+  import_playbook: 04_waf.yml
+
+- name: "05 — Suricata IDS"
+  import_playbook: 05_suricata.yml
+
+- name: "06 — Wazuh SIEM"
+  import_playbook: 06_wazuh.yml

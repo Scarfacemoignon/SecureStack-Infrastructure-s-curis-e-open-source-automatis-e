@@ -1,11 +1,17 @@
 ---
 # ============================================================
 # Inventaire Ansible — Connexion via Docker exec
+# Note : les conteneurs n'ont pas Python — utiliser
+#        community.docker.docker_container_exec pour les tâches
+#        sur conteneurs, et hosts: localhost pour les modules
+#        Ansible natifs (uri, command docker exec, etc.)
 # ============================================================
 all:
   vars:
     ansible_connection: community.docker.docker
-    # Utilise docker exec au lieu de SSH (parfait pour les conteneurs locaux)
+    ansible_python_interpreter: /bin/sh
+    # Les modules natifs Ansible nécessitent Python — préférer
+    # community.docker.docker_container_exec ou hosts: localhost
 
   children:
 

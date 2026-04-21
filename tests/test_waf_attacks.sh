@@ -53,13 +53,30 @@ check_blocked "LFI double encodé"     "$WAF_URL/?file=..%252F..%252Fetc%252Fpas
 # ── Shellshock / Command Injection ────────────────────────────
 echo -e "\n${BLUE}[CMDi] Command Injection${NC}"
 check_blocked "Command injection"     "$WAF_URL/?cmd=; cat /etc/passwd"
-check_blocked "Shellshock"            "$WAF_URL/" \
-    # Note: Shellshock via User-Agent header
+
+# Shellshock via User-Agent header
+TEST_NAME="Shellshock"
+CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+    -H 'User-Agent: () { :;}; echo vulnerable' "$WAF_URL/" 2>/dev/null)
+if [[ "$CODE" == "403" || "$CODE" == "406" ]]; then
+    echo -e "  ${GREEN}[BLOQUÉ]${NC} $TEST_NAME (HTTP $CODE)"
+    ((PASS++))
+else
+    echo -e "  ${RED}[PASSÉ !]${NC} $TEST_NAME (HTTP $CODE) ← PROBLÈME"
+    ((FAIL++))
+fi
 
 # ── Scanner detection ─────────────────────────────────────────
 echo -e "\n${BLUE}[SCAN] Détection de scanners${NC}"
-check_blocked "Nikto User-Agent" \
-    "$(curl -s -o /dev/null -w "%{http_code}" -A "Nikto" $WAF_URL)"
+TEST_NAME="Nikto User-Agent"
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -A "Nikto" "$WAF_URL" 2>/dev/null)
+if [[ "$CODE" == "403" || "$CODE" == "406" ]]; then
+    echo -e "  ${GREEN}[BLOQUÉ]${NC} $TEST_NAME (HTTP $CODE)"
+    ((PASS++))
+else
+    echo -e "  ${RED}[PASSÉ !]${NC} $TEST_NAME (HTTP $CODE) ← PROBLÈME"
+    ((FAIL++))
+fi
 
 # ── Résumé ────────────────────────────────────────────────────
 echo ""

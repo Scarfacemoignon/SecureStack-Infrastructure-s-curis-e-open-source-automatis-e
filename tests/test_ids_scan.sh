@@ -15,6 +15,11 @@ echo "============================================================"
 echo " TEST IDS Suricata — Détection de scans"
 echo "============================================================"
 
+if ! command -v nmap &>/dev/null; then
+    echo -e "${RED}ERREUR — nmap n'est pas installé. Lancez : sudo apt install nmap${NC}"
+    exit 1
+fi
+
 # Compter les alertes avant les tests
 ALERTS_BEFORE=$(docker exec suricata sh -c \
     "cat /var/log/suricata/eve.json | grep 'alert' | wc -l" 2>/dev/null || echo "0")
@@ -23,7 +28,7 @@ echo -e "\n${YELLOW}[1/4] Alertes Suricata avant tests : $ALERTS_BEFORE${NC}"
 
 # ── Test 1 : Scan SYN (Nmap -sS) ─────────────────────────────
 echo -e "\n${YELLOW}[2/4] Lancement scan SYN (nmap -sS)...${NC}"
-nmap -sS -T4 --top-ports 100 $TARGET 2>/dev/null | tail -5
+sudo nmap -sS -T4 --top-ports 100 $TARGET 2>/dev/null | tail -5
 sleep 2
 
 # ── Test 2 : Scan de version (Nmap -sV) ──────────────────────

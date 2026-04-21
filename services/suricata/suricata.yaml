@@ -23,14 +23,9 @@ vars:
     SQL_PORTS: "3306"
 
 # ── Capture réseau ───────────────────────────────────────────
-af-packet:
-  - interface: eth0
-    # Interface sur le réseau DMZ pour capturer le trafic entrant
-    cluster-id: 99
-    cluster-type: cluster_flow
-    defrag: yes
-    use-mmap: yes
-    # use-mmap = mode haute performance (accès mémoire direct)
+# pcap any = capture sur toutes les interfaces (hôte + bridges Docker br-XXXX)
+pcap:
+  - interface: any
 
 # ── Moteur de détection ──────────────────────────────────────
 detect:
