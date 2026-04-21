@@ -12,10 +12,10 @@
 #   ansible-playbook playbooks/01_mariadb.yml --ask-vault-pass
 # ============================================================
 
-db_root_password: "ChangeMe_Root_2024!"
-db_repl_password: "ChangeMe_Repl_2024!"
-db_app_password:  "ChangeMe_App_2024!"
+db_root_password: "TP_OPENSOURCE_2026!"
+db_repl_password: "TP_OPENSOURCE_2026!"
+db_app_password:  "TP_OPENSOURCE_2026!"
 
-haproxy_stats_password: "ChangeMe_Stats_2024!"
-wazuh_api_password:     "ChangeMe_Api_2024!"
-indexer_password:       "ChangeMe_Wazuh_2024!"
+haproxy_stats_password: "TP_OPENSOURCE_2026!"
+wazuh_api_password:     "TP_OPENSOURCE_2026!"
+indexer_password:       "TP_OPENSOURCE_2026!"

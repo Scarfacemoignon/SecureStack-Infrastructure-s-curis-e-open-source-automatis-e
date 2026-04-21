@@ -121,7 +121,7 @@ services:
       management:
         ipv4_address: 172.23.0.15
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -144,7 +144,7 @@ services:
       management:
         ipv4_address: 172.23.0.16
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -166,6 +166,9 @@ services:
     cap_add:
       - NET_ADMIN
       # NET_ADMIN requis par Keepalived pour créer la VIP (adresse IP virtuelle)
+    environment:
+      - KEEPALIVED_STATE=MASTER
+      - KEEPALIVED_PRIORITY=100
     networks:
       frontend:
         ipv4_address: 172.21.0.10

@@ -10,12 +10,13 @@ CREATE DATABASE IF NOT EXISTS appdb
 
 -- Utilisateur pour l'application web (Nginx/PHP)
 CREATE USER IF NOT EXISTS 'appuser'@'172.22.%'
-  IDENTIFIED BY 'ChangeMe_App_2024!';
+  IDENTIFIED BY 'TP_OPENSOURCE_2026!';
 GRANT SELECT, INSERT, UPDATE, DELETE ON appdb.* TO 'appuser'@'172.22.%';
 
 -- Utilisateur de réplication (permission minimale : lecture binlog uniquement)
+-- Le mot de passe est injecté via la variable d'env DB_REPL_PASSWORD (voir .env)
 CREATE USER IF NOT EXISTS 'replicator'@'172.22.%'
-  IDENTIFIED BY 'ChangeMe_Repl_2024!';
+  IDENTIFIED BY 'TP_OPENSOURCE_2026!';
 GRANT REPLICATION SLAVE ON *.* TO 'replicator'@'172.22.%';
 
 -- Table de test pour valider la réplication

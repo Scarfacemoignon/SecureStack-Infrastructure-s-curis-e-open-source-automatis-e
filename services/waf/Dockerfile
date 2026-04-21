@@ -11,4 +11,4 @@ COPY modsecurity-override.conf /etc/modsecurity.d/setup.conf
 EXPOSE 80 443
 
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
-    CMD wget -qO- http://localhost/health || exit 1
+    CMD wget -qO- http://127.0.0.1/health || exit 1
