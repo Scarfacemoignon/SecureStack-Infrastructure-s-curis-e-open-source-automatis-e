@@ -1,0 +1,64 @@
+---
+# ============================================================
+# Playbook 04 — WAF ModSecurity : Validation et tests
+# Usage : ansible-playbook playbooks/04_waf.yml
+# ============================================================
+
+- name: "WAF ModSecurity — Validation du déploiement"
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+
+    - name: "Vérifier que le WAF répond"
+      uri:
+        url: "http://localhost/health"
+        return_content: yes
+        status_code: 200
+      register: waf_health
+      retries: 5
+      delay: 3
+
+    - name: "Afficher le statut WAF"
+      debug:
+        msg: "WAF ModSecurity : {{ waf_health.content | trim }}"
+
+    # ── Test de détection SQLi ─────────────────────────────
+    - name: "Test SQLi — doit être BLOQUÉ par ModSecurity"
+      uri:
+        url: "http://localhost/?id=1' OR '1'='1"
+        status_code: [403, 406]
+        # 403 = Forbidden (ModSecurity en mode On)
+        # 406 = Not Acceptable (variante de blocage)
+      register: sqli_test
+      ignore_errors: true
+
+    - name: "Résultat test SQLi"
+      debug:
+        msg: >
+          SQLi test : {{ 'BLOQUÉ (OK)' if sqli_test.status in [403, 406]
+          else 'PASSÉ (vérifier SecRuleEngine)' }}
+
+    # ── Test de détection XSS ──────────────────────────────
+    - name: "Test XSS — doit être BLOQUÉ par ModSecurity"
+      uri:
+        url: "http://localhost/?q=<script>alert(1)</script>"
+        status_code: [403, 406]
+      register: xss_test
+      ignore_errors: true
+
+    - name: "Résultat test XSS"
+      debug:
+        msg: >
+          XSS test : {{ 'BLOQUÉ (OK)' if xss_test.status in [403, 406]
+          else 'PASSÉ (vérifier SecRuleEngine)' }}
+
+    # ── Vérification des logs d'audit ModSecurity ─────────
+    - name: "Vérifier la présence des logs d'audit"
+      command: docker exec waf ls -la /var/log/modsecurity/
+      register: modsec_logs
+      changed_when: false
+
+    - name: "Afficher les logs disponibles"
+      debug:
+        msg: "{{ modsec_logs.stdout_lines }}"

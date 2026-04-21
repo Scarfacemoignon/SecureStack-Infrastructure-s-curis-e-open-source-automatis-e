@@ -1,0 +1,32 @@
+---
+# ============================================================
+# Variables globales — Partagées par tous les playbooks
+# ============================================================
+
+# ── Réseau ────────────────────────────────────────────────────
+network_backend:    "172.22.0.0/24"
+network_frontend:   "172.21.0.0/24"
+network_dmz:        "172.20.0.0/24"
+network_mgmt:       "172.23.0.0/24"
+
+# ── IPs clés ──────────────────────────────────────────────────
+mariadb_master_ip:  "172.22.0.20"
+mariadb_slave_ip:   "172.22.0.21"
+haproxy_vip:        "172.21.0.100"
+wazuh_manager_ip:   "172.23.0.10"
+
+# ── Versions des services ─────────────────────────────────────
+mariadb_version:    "10.11"
+nginx_version:      "1.25"
+haproxy_version:    "2.8"
+wazuh_version:      "4.7.0"
+
+# ── Wazuh Agent ───────────────────────────────────────────────
+wazuh_agent_package: "wazuh-agent"
+wazuh_manager_port:  1514
+wazuh_registration_port: 1515
+
+# ── Les secrets sont dans vault.yml (chiffré ansible-vault) ───
+# db_root_password: voir vault.yml
+# db_repl_password: voir vault.yml
+# db_app_password:  voir vault.yml

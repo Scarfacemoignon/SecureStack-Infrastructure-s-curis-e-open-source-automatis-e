@@ -1,0 +1,74 @@
+---
+# ============================================================
+# Playbook 06 — Wazuh : Déploiement agents + validation SIEM
+# Usage : ansible-playbook playbooks/06_wazuh.yml --ask-vault-pass
+# ============================================================
+
+- name: "Wazuh — Déploiement des agents sur tous les nœuds"
+  hosts: all
+  gather_facts: false
+  vars_files:
+    - ../group_vars/vault.yml
+
+  tasks:
+
+    - name: "Vérifier la connectivité vers le manager Wazuh"
+      wait_for:
+        host: "{{ wazuh_manager_ip }}"
+        port: "{{ wazuh_manager_port }}"
+        timeout: 30
+      ignore_errors: true
+      register: wazuh_reachable
+
+    - name: "Avertir si Wazuh Manager inaccessible"
+      debug:
+        msg: "ATTENTION : Wazuh Manager non joignable depuis {{ inventory_hostname }}"
+      when: wazuh_reachable.failed is defined and wazuh_reachable.failed
+
+# ── PLAY 2 : Validation du Manager Wazuh ─────────────────────
+- name: "Wazuh Manager — Validation via API REST"
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../group_vars/vault.yml
+
+  tasks:
+
+    - name: "Vérifier que le dashboard Wazuh répond"
+      uri:
+        url: "http://localhost:5601/"
+        status_code: [200, 302]
+        timeout: 30
+      register: wazuh_dashboard
+      retries: 10
+      delay: 10
+      ignore_errors: true
+
+    - name: "Statut dashboard Wazuh"
+      debug:
+        msg: >
+          Dashboard Wazuh :
+          {{ 'OPÉRATIONNEL' if wazuh_dashboard.status in [200, 302]
+          else 'EN COURS DE DÉMARRAGE (attendre ~2 minutes)' }}
+
+    - name: "Lister les agents enregistrés (via API)"
+      uri:
+        url: "https://localhost:55000/agents"
+        method: GET
+        user: "wazuh-wui"
+        password: "{{ wazuh_api_password }}"
+        force_basic_auth: yes
+        validate_certs: no
+        return_content: yes
+      register: wazuh_agents
+      ignore_errors: true
+
+    - name: "Afficher les agents Wazuh connectés"
+      debug:
+        msg: "Agents enregistrés : {{ wazuh_agents.json.data.affected_items | default([]) | map(attribute='name') | list }}"
+      when: wazuh_agents.json is defined
+
+    - name: "Afficher le nombre total d'agents"
+      debug:
+        msg: "Total agents : {{ wazuh_agents.json.data.total_affected_items | default(0) }}"
+      when: wazuh_agents.json is defined

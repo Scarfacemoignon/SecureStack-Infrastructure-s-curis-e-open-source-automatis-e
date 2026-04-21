@@ -1,0 +1,52 @@
+---
+# ============================================================
+# Playbook 05 — Suricata IDS : Validation
+# Usage : ansible-playbook playbooks/05_suricata.yml
+# ============================================================
+
+- name: "Suricata IDS — Validation du déploiement"
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+
+    - name: "Vérifier que Suricata tourne"
+      command: docker exec suricata suricata --build-info
+      register: suricata_info
+      changed_when: false
+
+    - name: "Vérifier les logs EVE JSON"
+      command: docker exec suricata ls -lh /var/log/suricata/
+      register: suricata_logs
+      changed_when: false
+
+    - name: "Afficher les fichiers de log"
+      debug:
+        msg: "{{ suricata_logs.stdout_lines }}"
+
+    - name: "Compter les alertes générées"
+      command: >
+        docker exec suricata sh -c
+        "cat /var/log/suricata/eve.json | grep '\"event_type\":\"alert\"' | wc -l"
+      register: alert_count
+      changed_when: false
+
+    - name: "Rapport alertes Suricata"
+      debug:
+        msg: "Nombre d'alertes Suricata : {{ alert_count.stdout }}"
+
+    - name: "Afficher les 5 dernières alertes"
+      command: >
+        docker exec suricata sh -c
+        "cat /var/log/suricata/eve.json |
+         grep '\"event_type\":\"alert\"' |
+         tail -5 |
+         python3 -m json.tool"
+      register: last_alerts
+      changed_when: false
+      ignore_errors: true
+
+    - name: "Dernières alertes IDS"
+      debug:
+        msg: "{{ last_alerts.stdout_lines }}"
+      when: last_alerts.rc == 0

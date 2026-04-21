@@ -1,0 +1,106 @@
+# ============================================================
+# Wazuh Stack — Manager + Indexer + Dashboard
+# Basé sur la stack officielle Wazuh 4.7
+# Doc : https://documentation.wazuh.com/current/deployment-options/docker/
+# ============================================================
+
+version: "3.9"
+
+services:
+
+  # ── Wazuh Manager ─────────────────────────────────────────
+  wazuh.manager:
+    image: wazuh/wazuh-manager:4.7.0
+    hostname: wazuh.manager
+    container_name: wazuh-manager
+    restart: unless-stopped
+    environment:
+      - INDEXER_URL=https://wazuh.indexer:9200
+      - INDEXER_USERNAME=admin
+      - INDEXER_PASSWORD=${INDEXER_PASSWORD}
+      - FILEBEAT_SSL_VERIFICATION_MODE=full
+    volumes:
+      - wazuh_api_configuration:/var/ossec/api/configuration
+      - wazuh_etc:/var/ossec/etc
+      - wazuh_logs:/var/ossec/logs
+      - wazuh_queue:/var/ossec/queue
+      - wazuh_var_multigroups:/var/ossec/var/multigroups
+      - wazuh_integrations:/var/ossec/integrations
+      - wazuh_active_response:/var/ossec/active-response/bin
+      - wazuh_agentless:/var/ossec/agentless
+      - wazuh_wodles:/var/ossec/wodles
+      - filebeat_etc:/etc/filebeat
+      - filebeat_var:/var/lib/filebeat
+      - ./wazuh-manager.conf:/wazuh-config-mount/etc/ossec.conf
+      # Montage de notre configuration personnalisée
+    ports:
+      - "1514:1514/udp"   # Agents → Manager (logs)
+      - "1515:1515"       # Agents → Manager (enregistrement)
+      - "514:514/udp"     # Syslog externe
+      - "55000:55000"     # API REST Wazuh
+    networks:
+      management:
+        ipv4_address: 172.23.0.10
+
+  # ── Wazuh Indexer (OpenSearch) ────────────────────────────
+  wazuh.indexer:
+    image: wazuh/wazuh-indexer:4.7.0
+    hostname: wazuh.indexer
+    container_name: wazuh-indexer
+    restart: unless-stopped
+    environment:
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      # Limite la RAM OpenSearch à 512Mo (adapter selon vos ressources)
+    volumes:
+      - wazuh_indexer_data:/var/lib/wazuh-indexer
+    networks:
+      management:
+        ipv4_address: 172.23.0.30
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+
+  # ── Wazuh Dashboard ───────────────────────────────────────
+  wazuh.dashboard:
+    image: wazuh/wazuh-dashboard:4.7.0
+    hostname: wazuh.dashboard
+    container_name: wazuh-dashboard
+    restart: unless-stopped
+    depends_on:
+      - wazuh.indexer
+    environment:
+      - INDEXER_USERNAME=admin
+      - INDEXER_PASSWORD=${INDEXER_PASSWORD}
+      - WAZUH_API_URL=https://wazuh.manager
+      - DASHBOARD_USERNAME=${WAZUH_API_USER}
+      - DASHBOARD_PASSWORD=${WAZUH_API_PASSWORD}
+    ports:
+      - "5601:5601"
+      # Dashboard accessible sur http://localhost:5601
+    networks:
+      management:
+        ipv4_address: 172.23.0.31
+
+volumes:
+  wazuh_api_configuration:
+  wazuh_etc:
+  wazuh_logs:
+  wazuh_queue:
+  wazuh_var_multigroups:
+  wazuh_integrations:
+  wazuh_active_response:
+  wazuh_agentless:
+  wazuh_wodles:
+  filebeat_etc:
+  filebeat_var:
+  wazuh_indexer_data:
+
+networks:
+  management:
+    external: true
+    name: tp_opensourcetp_openSource_management
+    # Utilise le réseau management créé par le docker-compose.yml principal

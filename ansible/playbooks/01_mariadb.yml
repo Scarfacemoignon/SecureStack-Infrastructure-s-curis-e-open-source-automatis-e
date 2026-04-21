@@ -1,0 +1,101 @@
+---
+# ============================================================
+# Playbook 01 — MariaDB : Configuration de la réplication
+# Usage : ansible-playbook playbooks/01_mariadb.yml --ask-vault-pass
+# ============================================================
+
+# ── PLAY 1 : Récupérer les coordonnées binlog du master ──────
+- name: "MariaDB MASTER — Récupération des coordonnées binlog"
+  hosts: mariadb-master
+  gather_facts: false
+  vars_files:
+    - ../group_vars/vault.yml
+
+  tasks:
+
+    - name: "Attendre que MariaDB soit prêt"
+      wait_for:
+        port: 3306
+        host: "{{ mariadb_master_ip }}"
+        timeout: 60
+
+    - name: "Récupérer le statut du master"
+      community.mysql.mysql_query:
+        login_user: root
+        login_password: "{{ db_root_password }}"
+        login_host: "{{ mariadb_master_ip }}"
+        query: "SHOW MASTER STATUS"
+      register: master_status
+
+    - name: "Afficher les coordonnées binlog"
+      debug:
+        msg: >
+          Fichier: {{ master_status.query_result[0][0].File }},
+          Position: {{ master_status.query_result[0][0].Position }}
+
+    - name: "Partager les coordonnées avec le slave"
+      set_fact:
+        binlog_file: "{{ master_status.query_result[0][0].File }}"
+        binlog_pos:  "{{ master_status.query_result[0][0].Position }}"
+      delegate_facts: true
+      delegate_to: mariadb-slave
+
+# ── PLAY 2 : Configurer la réplication sur le slave ──────────
+- name: "MariaDB SLAVE — Configuration de la réplication"
+  hosts: mariadb-slave
+  gather_facts: false
+  vars_files:
+    - ../group_vars/vault.yml
+
+  tasks:
+
+    - name: "Arrêter la réplication existante (si présente)"
+      community.mysql.mysql_replication:
+        login_user: root
+        login_password: "{{ db_root_password }}"
+        login_host: "{{ mariadb_slave_ip }}"
+        mode: stopreplica
+      ignore_errors: true
+
+    - name: "Configurer le slave"
+      community.mysql.mysql_replication:
+        login_user: root
+        login_password: "{{ db_root_password }}"
+        login_host: "{{ mariadb_slave_ip }}"
+        mode: changeprimary
+        primary_host: "{{ mariadb_master_ip }}"
+        primary_user: "replicator"
+        primary_password: "{{ db_repl_password }}"
+        primary_log_file: "{{ hostvars['mariadb-slave']['binlog_file'] }}"
+        primary_log_pos: "{{ hostvars['mariadb-slave']['binlog_pos'] }}"
+
+    - name: "Démarrer la réplication"
+      community.mysql.mysql_replication:
+        login_user: root
+        login_password: "{{ db_root_password }}"
+        login_host: "{{ mariadb_slave_ip }}"
+        mode: startreplica
+
+    - name: "Vérifier le statut de la réplication"
+      community.mysql.mysql_replication:
+        login_user: root
+        login_password: "{{ db_root_password }}"
+        login_host: "{{ mariadb_slave_ip }}"
+        mode: getreplica
+      register: slave_status
+
+    - name: "Valider que la réplication fonctionne"
+      assert:
+        that:
+          - slave_status.Slave_IO_Running == "Yes"
+          - slave_status.Slave_SQL_Running == "Yes"
+        fail_msg: |
+          ERREUR : Réplication KO !
+          IO Running: {{ slave_status.Slave_IO_Running }}
+          SQL Running: {{ slave_status.Slave_SQL_Running }}
+          Erreur: {{ slave_status.Last_Error | default('aucune') }}
+        success_msg: "OK : Réplication active (IO=Yes, SQL=Yes)"
+
+    - name: "Afficher le retard de réplication"
+      debug:
+        msg: "Retard : {{ slave_status.Seconds_Behind_Master }}s"

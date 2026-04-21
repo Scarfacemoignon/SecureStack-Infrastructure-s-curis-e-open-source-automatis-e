@@ -1,0 +1,252 @@
+# ============================================================
+# Docker Compose — Architecture TP Cybersécurité Open Source
+# Ordre de démarrage : MariaDB → Nginx → HAProxy → WAF → Suricata
+# ============================================================
+
+version: "3.9"
+
+# ── Réseaux isolés (zones de sécurité) ──────────────────────
+networks:
+  dmz:
+    driver: bridge
+    name: tp_openSource_dmz
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+
+  frontend:
+    driver: bridge
+    name: tp_openSource_frontend
+    ipam:
+      config:
+        - subnet: 172.21.0.0/24
+
+  backend:
+    driver: bridge
+    name: tp_openSource_backend
+    ipam:
+      config:
+        - subnet: 172.22.0.0/24
+
+  management:
+    driver: bridge
+    name: tp_openSource_management
+    ipam:
+      config:
+        - subnet: 172.23.0.0/24
+
+# ── Volumes persistants ──────────────────────────────────────
+volumes:
+  mariadb_master_data:
+  mariadb_slave_data:
+  suricata_logs:
+  modsec_logs:
+
+# ════════════════════════════════════════════════════════════
+# SERVICES
+# ════════════════════════════════════════════════════════════
+services:
+
+  # ──────────────────────────────────────────────────────────
+  # 1. MariaDB MASTER
+  # ──────────────────────────────────────────────────────────
+  mariadb-master:
+    build:
+      context: ./services/mariadb/master
+    container_name: mariadb-master
+    hostname: mariadb-master
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: appdb
+    volumes:
+      - mariadb_master_data:/var/lib/mysql
+    networks:
+      backend:
+        ipv4_address: 172.22.0.20
+      management:
+        ipv4_address: 172.23.0.17
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost",
+             "-u", "root", "--password=${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ──────────────────────────────────────────────────────────
+  # 2. MariaDB SLAVE
+  # ──────────────────────────────────────────────────────────
+  mariadb-slave:
+    build:
+      context: ./services/mariadb/slave
+    container_name: mariadb-slave
+    hostname: mariadb-slave
+    restart: unless-stopped
+    depends_on:
+      mariadb-master:
+        condition: service_healthy
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    volumes:
+      - mariadb_slave_data:/var/lib/mysql
+    networks:
+      backend:
+        ipv4_address: 172.22.0.21
+      management:
+        ipv4_address: 172.23.0.18
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost",
+             "-u", "root", "--password=${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ──────────────────────────────────────────────────────────
+  # 3. Nginx Web Server #1
+  # ──────────────────────────────────────────────────────────
+  nginx1:
+    build:
+      context: ./services/nginx
+    container_name: nginx1
+    hostname: nginx1
+    restart: unless-stopped
+    depends_on:
+      mariadb-master:
+        condition: service_healthy
+    networks:
+      backend:
+        ipv4_address: 172.22.0.10
+      management:
+        ipv4_address: 172.23.0.15
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # ──────────────────────────────────────────────────────────
+  # 4. Nginx Web Server #2
+  # ──────────────────────────────────────────────────────────
+  nginx2:
+    build:
+      context: ./services/nginx
+    container_name: nginx2
+    hostname: nginx2
+    restart: unless-stopped
+    depends_on:
+      mariadb-master:
+        condition: service_healthy
+    networks:
+      backend:
+        ipv4_address: 172.22.0.11
+      management:
+        ipv4_address: 172.23.0.16
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # ──────────────────────────────────────────────────────────
+  # 5. HAProxy #1 (ACTIF — priorité Keepalived 100)
+  # ──────────────────────────────────────────────────────────
+  haproxy1:
+    build:
+      context: ./services/haproxy
+    container_name: haproxy1
+    hostname: haproxy1
+    restart: unless-stopped
+    depends_on:
+      nginx1:
+        condition: service_healthy
+      nginx2:
+        condition: service_healthy
+    cap_add:
+      - NET_ADMIN
+      # NET_ADMIN requis par Keepalived pour créer la VIP (adresse IP virtuelle)
+    networks:
+      frontend:
+        ipv4_address: 172.21.0.10
+      backend:
+        ipv4_address: 172.22.0.30
+      management:
+        ipv4_address: 172.23.0.13
+    ports:
+      - "8404:8404"
+      # Dashboard HAProxy accessible sur http://localhost:8404/stats
+
+  # ──────────────────────────────────────────────────────────
+  # 6. HAProxy #2 (PASSIF — priorité Keepalived 90)
+  # ──────────────────────────────────────────────────────────
+  haproxy2:
+    build:
+      context: ./services/haproxy
+    container_name: haproxy2
+    hostname: haproxy2
+    restart: unless-stopped
+    depends_on:
+      nginx1:
+        condition: service_healthy
+      nginx2:
+        condition: service_healthy
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - KEEPALIVED_STATE=BACKUP
+      - KEEPALIVED_PRIORITY=90
+      # Ces variables peuvent être lues dans keepalived.conf
+    networks:
+      frontend:
+        ipv4_address: 172.21.0.11
+      backend:
+        ipv4_address: 172.22.0.31
+      management:
+        ipv4_address: 172.23.0.14
+
+  # ──────────────────────────────────────────────────────────
+  # 7. ModSecurity WAF (point d'entrée Internet)
+  # ──────────────────────────────────────────────────────────
+  waf:
+    build:
+      context: ./services/waf
+    container_name: waf
+    hostname: waf
+    restart: unless-stopped
+    depends_on:
+      haproxy1:
+        condition: service_started
+    volumes:
+      - modsec_logs:/var/log/modsecurity
+      # Logs partagés avec l'agent Wazuh
+    networks:
+      dmz:
+        ipv4_address: 172.20.0.10
+      frontend:
+        ipv4_address: 172.21.0.5
+      management:
+        ipv4_address: 172.23.0.11
+    ports:
+      - "80:80"
+      # SEUL port exposé vers l'extérieur pour HTTP
+
+  # ──────────────────────────────────────────────────────────
+  # 8. Suricata IDS (dérivation sur le réseau DMZ)
+  # ──────────────────────────────────────────────────────────
+  suricata:
+    build:
+      context: ./services/suricata
+    container_name: suricata
+    hostname: suricata
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_NICE
+      # SYS_NICE : permet d'ajuster la priorité CPU pour la capture
+    network_mode: "host"
+    # Mode host : accès à toutes les interfaces réseau pour la capture
+    # Alternative : utiliser un réseau Docker avec --net=container:waf
+    volumes:
+      - suricata_logs:/var/log/suricata
+      # Logs EVE JSON partagés avec l'agent Wazuh

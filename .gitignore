@@ -1,0 +1,20 @@
+# Secrets — ne jamais versionner
+.env
+*.pem
+*.key
+*.crt
+secrets/
+
+# Données persistantes
+data/
+
+# Logs locaux
+*.log
+
+# Fichiers temporaires
+*.tmp
+__pycache__/
+.ansible/
+
+# Vault password file
+.vault_pass

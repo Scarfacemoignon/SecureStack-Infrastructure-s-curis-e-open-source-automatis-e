@@ -1,0 +1,21 @@
+---
+# ============================================================
+# VAULT — Secrets chiffrés avec ansible-vault
+# ============================================================
+# Pour chiffrer ce fichier :
+#   ansible-vault encrypt ansible/group_vars/vault.yml
+#
+# Pour l'éditer après chiffrement :
+#   ansible-vault edit ansible/group_vars/vault.yml
+#
+# Pour exécuter un playbook avec le vault :
+#   ansible-playbook playbooks/01_mariadb.yml --ask-vault-pass
+# ============================================================
+
+db_root_password: "ChangeMe_Root_2024!"
+db_repl_password: "ChangeMe_Repl_2024!"
+db_app_password:  "ChangeMe_App_2024!"
+
+haproxy_stats_password: "ChangeMe_Stats_2024!"
+wazuh_api_password:     "ChangeMe_Api_2024!"
+indexer_password:       "ChangeMe_Wazuh_2024!"

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>TP Cybersécurité — Web Server</title>
+    <style>
+        body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; padding: 40px; }
+        h1   { color: #00d4ff; }
+        .info { background: #16213e; padding: 20px; border-radius: 8px; margin: 20px 0; }
+        .ok  { color: #00ff88; }
+    </style>
+</head>
+<body>
+    <h1>TP Cybersécurité Open Source</h1>
+    <div class="info">
+        <p class="ok">&#10003; Serveur Nginx opérationnel</p>
+        <p>Hostname : <strong id="hostname">NGINX_NODE</strong></p>
+        <p>Architecture : WAF → HAProxy → Nginx → MariaDB</p>
+    </div>
+    <div class="info">
+        <h3>Stack déployée :</h3>
+        <ul>
+            <li>WAF : ModSecurity + OWASP CRS</li>
+            <li>LB  : HAProxy + Keepalived (HA actif/passif)</li>
+            <li>Web : Nginx x2</li>
+            <li>DB  : MariaDB Master/Slave</li>
+            <li>IDS : Suricata (dérivation)</li>
+            <li>SIEM: Wazuh Manager + Agents</li>
+        </ul>
+    </div>
+</body>
+</html>

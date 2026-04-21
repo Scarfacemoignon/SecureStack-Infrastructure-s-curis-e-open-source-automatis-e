@@ -1,0 +1,80 @@
+---
+# ============================================================
+# Playbook 03 — HAProxy : Validation HA + Keepalived
+# Usage : ansible-playbook playbooks/03_haproxy.yml --ask-vault-pass
+# ============================================================
+
+- name: "HAProxy — Validation du cluster actif/passif"
+  hosts: loadbalancers
+  gather_facts: false
+  vars_files:
+    - ../group_vars/vault.yml
+
+  tasks:
+
+    - name: "Vérifier que HAProxy tourne"
+      uri:
+        url: "http://{{ ansible_host }}:8404/stats"
+        url_username: admin
+        url_password: "{{ haproxy_stats_password }}"
+        return_content: yes
+        status_code: 200
+      register: haproxy_stats
+      retries: 3
+      delay: 5
+
+    - name: "Afficher l'état HAProxy"
+      debug:
+        msg: "HAProxy {{ inventory_hostname }} : UP (stats accessibles)"
+
+- name: "HAProxy — Vérification des backends Nginx"
+  hosts: haproxy1
+  gather_facts: false
+  vars_files:
+    - ../group_vars/vault.yml
+
+  tasks:
+
+    - name: "Vérifier que les backends Nginx sont UP dans HAProxy"
+      uri:
+        url: "http://172.21.0.10:8404/stats;csv"
+        url_username: admin
+        url_password: "{{ haproxy_stats_password }}"
+        return_content: yes
+      register: haproxy_csv
+
+    - name: "Afficher les serveurs actifs"
+      debug:
+        msg: >
+          Backends actifs :
+          {{ haproxy_csv.content | regex_findall('nginx[^,]+,UP') }}
+
+    - name: "Valider que les deux Nginx sont UP"
+      assert:
+        that:
+          - "'nginx1' in haproxy_csv.content"
+          - "'nginx2' in haproxy_csv.content"
+        fail_msg: "ERREUR : Un ou plusieurs backends Nginx sont DOWN !"
+        success_msg: "OK : Les deux backends Nginx sont actifs"
+
+- name: "HAProxy — Test de la VIP Keepalived"
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+
+    - name: "Tester l'accès via la VIP HAProxy"
+      uri:
+        url: "http://172.21.0.100/"
+        return_content: yes
+        status_code: 200
+      register: vip_response
+      retries: 5
+      delay: 3
+
+    - name: "Valider la réponse via la VIP"
+      assert:
+        that:
+          - vip_response.status == 200
+        success_msg: "OK : VIP {{ haproxy_vip }} opérationnelle"
+        fail_msg: "ERREUR : VIP {{ haproxy_vip }} inaccessible"

@@ -1,0 +1,54 @@
+---
+# ============================================================
+# Playbook 02 — Nginx : Déploiement agents Wazuh + hardening
+# Usage : ansible-playbook playbooks/02_nginx.yml --ask-vault-pass
+# ============================================================
+
+- name: "Nginx — Hardening et installation agent Wazuh"
+  hosts: webservers
+  gather_facts: true
+  vars_files:
+    - ../group_vars/vault.yml
+
+  tasks:
+
+    - name: "Vérifier que Nginx répond"
+      uri:
+        url: "http://{{ ansible_host }}:8080/health"
+        return_content: yes
+      register: health_check
+      retries: 5
+      delay: 5
+
+    - name: "Afficher la réponse health check"
+      debug:
+        msg: "Nginx {{ inventory_hostname }} : {{ health_check.content | trim }}"
+
+    - name: "Installer l'agent Wazuh sur Nginx"
+      block:
+        - name: "Télécharger le script d'installation Wazuh"
+          get_url:
+            url: "https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_4.7.0-1_amd64.deb"
+            dest: "/tmp/wazuh-agent.deb"
+            mode: '0644'
+
+        - name: "Installer le paquet Wazuh agent"
+          apt:
+            deb: "/tmp/wazuh-agent.deb"
+          environment:
+            WAZUH_MANAGER: "{{ wazuh_manager_ip }}"
+            WAZUH_AGENT_NAME: "{{ inventory_hostname }}"
+
+        - name: "Démarrer et activer l'agent Wazuh"
+          systemd:
+            name: wazuh-agent
+            state: started
+            enabled: yes
+      when: ansible_system == "Linux"
+
+    - name: "Personnaliser la page index.html avec le hostname"
+      replace:
+        path: /usr/share/nginx/html/index.html
+        regexp: 'NGINX_NODE'
+        replace: "{{ inventory_hostname }}"
+      # Permet de distinguer quel nœud répond (utile pour tester le LB)
