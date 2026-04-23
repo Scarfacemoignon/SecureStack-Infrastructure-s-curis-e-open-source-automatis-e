@@ -1,0 +1,295 @@
+<!-- ============================================================
+     Règles personnalisées — SecureStack
+     IDs utilisés : 110000-110399
+       110000-110099 : HAProxy
+       110100-110199 : Suricata (enrichissement)
+       110200-110299 : ModSecurity WAF (JSON)
+       110300-110399 : MariaDB (enrichissement)
+     ============================================================ -->
+
+
+<!-- ════════════════════════════════════════════════════════════
+     HAProxy — Load Balancer
+     ════════════════════════════════════════════════════════════ -->
+<group name="haproxy,web,">
+
+  <!-- Règle mère : regroupe tous les messages HAProxy -->
+  <rule id="110000" level="0">
+    <decoded_as>haproxy</decoded_as>
+    <description>HAProxy: message groupé.</description>
+  </rule>
+
+  <!-- HTTP 4xx : erreur client -->
+  <rule id="110001" level="3">
+    <if_sid>110000</if_sid>
+    <field name="haproxy.http_status">^4\d\d$</field>
+    <description>HAProxy: erreur client $(haproxy.http_status) depuis $(srcip) → $(haproxy.backend)/$(haproxy.server).</description>
+    <group>web,</group>
+  </rule>
+
+  <!-- HTTP 400 : requête malformée (souvent scan/injection) -->
+  <rule id="110002" level="6">
+    <if_sid>110001</if_sid>
+    <field name="haproxy.http_status">^400$</field>
+    <description>HAProxy: requête HTTP malformée (400) depuis $(srcip) — possible scan ou injection.</description>
+    <mitre>
+      <id>T1595</id>
+    </mitre>
+    <group>web,invalid_request,</group>
+  </rule>
+
+  <!-- HTTP 5xx : erreur serveur backend -->
+  <rule id="110003" level="5">
+    <if_sid>110000</if_sid>
+    <field name="haproxy.http_status">^5\d\d$</field>
+    <description>HAProxy: erreur serveur $(haproxy.http_status) sur $(haproxy.backend)/$(haproxy.server).</description>
+    <group>web,service_availability,</group>
+  </rule>
+
+  <!-- Rafale d'erreurs 5xx : possible DoS ou backend défaillant -->
+  <rule id="110004" level="10" frequency="10" timeframe="60">
+    <if_matched_sid>110003</if_matched_sid>
+    <description>HAProxy: rafale d'erreurs 5xx (10 en 60s) — backend potentiellement défaillant.</description>
+    <mitre>
+      <id>T1499</id>
+    </mitre>
+    <group>web,service_availability,dos,</group>
+  </rule>
+
+  <!-- Backend DOWN : critique, service indisponible -->
+  <rule id="110005" level="12">
+    <if_sid>110000</if_sid>
+    <field name="haproxy.server_state">^DOWN$</field>
+    <description>HAProxy: backend $(haproxy.backend)/$(haproxy.server) est DOWN — service dégradé.</description>
+    <mitre>
+      <id>T1499</id>
+    </mitre>
+    <group>service_availability,high_availability,</group>
+  </rule>
+
+  <!-- Backend UP : rétablissement -->
+  <rule id="110006" level="5">
+    <if_sid>110000</if_sid>
+    <field name="haproxy.server_state">^UP$</field>
+    <description>HAProxy: backend $(haproxy.backend)/$(haproxy.server) est de retour UP.</description>
+    <group>service_availability,high_availability,</group>
+  </rule>
+
+  <!-- Multiples 4xx depuis le même IP : reconnaissance/scan -->
+  <rule id="110007" level="10" frequency="20" timeframe="60">
+    <if_matched_sid>110001</if_matched_sid>
+    <same_source_ip/>
+    <description>HAProxy: 20+ erreurs 4xx depuis $(srcip) en 60s — probable scan ou attaque.</description>
+    <mitre>
+      <id>T1595</id>
+    </mitre>
+    <group>web,recon,brute_force,</group>
+  </rule>
+
+</group>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     Suricata IDS — Enrichissement des règles intégrées
+     (Les règles de base 86600-86604 restent actives)
+     ════════════════════════════════════════════════════════════ -->
+<group name="ids,suricata,">
+
+  <!-- Alerte critique (severity 1 = Suricata priorité maximale) -->
+  <rule id="110100" level="12">
+    <if_sid>86601</if_sid>
+    <field name="alert.severity">^1$</field>
+    <description>Suricata: alerte CRITIQUE (sévérité 1) — $(alert.signature)</description>
+    <mitre>
+      <id>T1595</id>
+    </mitre>
+    <group>attack,critical,</group>
+  </rule>
+
+  <!-- Alerte majeure (severity 2) -->
+  <rule id="110101" level="9">
+    <if_sid>86601</if_sid>
+    <field name="alert.severity">^2$</field>
+    <description>Suricata: alerte majeure (sévérité 2) — $(alert.signature)</description>
+    <group>attack,</group>
+  </rule>
+
+  <!-- Reconnaissance / scan réseau -->
+  <rule id="110102" level="8">
+    <if_sid>86601</if_sid>
+    <field name="alert.category">^Network Scan$|^Attempted Information Leak$|^Potentially Bad Traffic$|^Detection of a Network Scan$</field>
+    <description>Suricata: reconnaissance réseau détectée — $(alert.signature)</description>
+    <mitre>
+      <id>T1595</id>
+    </mitre>
+    <group>recon,scan,</group>
+  </rule>
+
+  <!-- Injection SQL détectée par Suricata -->
+  <rule id="110103" level="10">
+    <if_sid>86601</if_sid>
+    <field name="alert.signature">SQL Injection|SQLI|sql injection|Union Select|UNION SELECT</field>
+    <description>Suricata: tentative d'injection SQL — $(alert.signature)</description>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+    <group>sql_injection,attack,web,</group>
+  </rule>
+
+  <!-- Trafic bloqué par Suricata (action=drop) -->
+  <rule id="110104" level="7">
+    <if_sid>86601</if_sid>
+    <field name="alert.action">^drop$</field>
+    <description>Suricata: trafic bloqué — $(alert.signature)</description>
+    <group>firewall,blocked,</group>
+  </rule>
+
+  <!-- Rafale d'alertes Suricata : attaque soutenue -->
+  <rule id="110105" level="10" frequency="10" timeframe="60">
+    <if_matched_sid>86601</if_matched_sid>
+    <description>Suricata: 10+ alertes IDS en 60s — attaque soutenue possible.</description>
+    <mitre>
+      <id>T1595</id>
+    </mitre>
+    <group>attack,dos,</group>
+  </rule>
+
+  <!-- Exploitation web (CVE, shellshock, etc.) -->
+  <rule id="110106" level="11">
+    <if_sid>86601</if_sid>
+    <field name="alert.category">^Attempted Administrator Privilege Gain$|^Successful Administrator Privilege Gain$|^Web Application Attack$</field>
+    <description>Suricata: tentative d'exploitation web — $(alert.signature)</description>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+    <group>attack,exploit,web,</group>
+  </rule>
+
+  <!-- Malware / C2 communication -->
+  <rule id="110107" level="12">
+    <if_sid>86601</if_sid>
+    <field name="alert.category">^A Network Trojan was Detected$|^Malware Command and Control Activity Detected$|^Trojan Activity$</field>
+    <description>Suricata: activité malware / C2 détectée — $(alert.signature)</description>
+    <mitre>
+      <id>T1071</id>
+    </mitre>
+    <group>malware,attack,</group>
+  </rule>
+
+</group>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     ModSecurity WAF — Logs JSON (/var/log/modsecurity/audit.log)
+     ════════════════════════════════════════════════════════════ -->
+<group name="web,waf,modsecurity,">
+
+  <!-- Règle mère : log WAF JSON avec IP client -->
+  <rule id="110200" level="0">
+    <decoded_as>json</decoded_as>
+    <field name="transaction.client_ip">\.+</field>
+    <description>ModSecurity WAF: événement groupé.</description>
+    <options>no_full_log</options>
+  </rule>
+
+  <!-- Requête bloquée (403) -->
+  <rule id="110201" level="7">
+    <if_sid>110200</if_sid>
+    <field name="transaction.response.http_code">^403$</field>
+    <description>ModSecurity WAF: requête bloquée (403) depuis $(transaction.client_ip).</description>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+    <group>attack,blocked,</group>
+  </rule>
+
+  <!-- Rafale de blocks WAF depuis le même IP : attaque persistante -->
+  <rule id="110202" level="12" frequency="10" timeframe="120">
+    <if_matched_sid>110201</if_matched_sid>
+    <description>ModSecurity WAF: 10+ requêtes bloquées en 2 min — attaque persistante.</description>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+    <group>attack,blocked,brute_force,</group>
+  </rule>
+
+  <!-- Alerte WAF (warning, requête suspecte non bloquée) -->
+  <rule id="110203" level="4">
+    <if_sid>110200</if_sid>
+    <field name="transaction.response.http_code">^200$|^301$|^302$</field>
+    <field name="transaction.messages">\.+</field>
+    <description>ModSecurity WAF: alerte (requête suspecte passée) depuis $(transaction.client_ip).</description>
+    <group>suspicious,</group>
+  </rule>
+
+</group>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     MariaDB — Enrichissement des règles intégrées (88100-88103)
+     ════════════════════════════════════════════════════════════ -->
+<group name="mariadb,database,">
+
+  <!-- Erreur de réplication : critique pour la HA DB -->
+  <rule id="110300" level="10">
+    <if_sid>88101</if_sid>
+    <field name="mariadb.log">replication|Slave|replica|IO thread|SQL thread</field>
+    <description>MariaDB: erreur de réplication — $(mariadb.log)</description>
+    <mitre>
+      <id>T1485</id>
+    </mitre>
+    <group>replication,service_availability,</group>
+  </rule>
+
+  <!-- Trop de connexions : possible DoS ou fuite de connexions -->
+  <rule id="110301" level="9">
+    <if_sid>88101</if_sid>
+    <field name="mariadb.log">Too many connections|max_connections reached</field>
+    <description>MariaDB: limite de connexions atteinte — possible DoS ou fuite.</description>
+    <mitre>
+      <id>T1499</id>
+    </mitre>
+    <group>service_availability,dos,</group>
+  </rule>
+
+  <!-- Corruption InnoDB / crash -->
+  <rule id="110302" level="14">
+    <if_sid>88101</if_sid>
+    <field name="mariadb.log">Assertion failure|Database page corruption|table.*crash|innodb.*corrupt</field>
+    <description>MariaDB: corruption ou crash InnoDB critique — intervention requise.</description>
+    <group>service_availability,data_integrity,</group>
+  </rule>
+
+  <!-- Arrêt inattendu -->
+  <rule id="110303" level="12">
+    <if_sid>88101</if_sid>
+    <field name="mariadb.log">mysqld.*Aborted|Aborted connection|killed|shutdown</field>
+    <description>MariaDB: arrêt ou connexion avortée anormale.</description>
+    <mitre>
+      <id>T1529</id>
+    </mitre>
+    <group>service_availability,</group>
+  </rule>
+
+  <!-- Accès refusé (tentative auth échouée) -->
+  <rule id="110304" level="8">
+    <if_sid>88101</if_sid>
+    <field name="mariadb.log">Access denied for user</field>
+    <description>MariaDB: accès refusé — tentative d'authentification échouée.</description>
+    <mitre>
+      <id>T1078</id>
+    </mitre>
+    <group>authentication_failed,</group>
+  </rule>
+
+  <!-- Multiples refus d'accès : brute force DB -->
+  <rule id="110305" level="12" frequency="5" timeframe="60">
+    <if_matched_sid>110304</if_matched_sid>
+    <description>MariaDB: 5+ échecs d'authentification en 60s — brute force possible.</description>
+    <mitre>
+      <id>T1110</id>
+    </mitre>
+    <group>authentication_failures,brute_force,</group>
+  </rule>
+
+</group>

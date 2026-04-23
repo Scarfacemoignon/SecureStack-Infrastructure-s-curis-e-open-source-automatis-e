@@ -8,19 +8,36 @@
 vars:
   address-groups:
     HOME_NET: "[172.20.0.0/24,172.21.0.0/24,172.22.0.0/24,172.23.0.0/24]"
-    # HOME_NET = nos réseaux internes (Docker)
-
     EXTERNAL_NET: "!$HOME_NET"
-    # EXTERNAL_NET = tout ce qui n'est pas HOME_NET (Internet)
-
     HTTP_SERVERS: "$HOME_NET"
     SQL_SERVERS: "[172.22.0.20,172.22.0.21]"
     DNS_SERVERS: "$HOME_NET"
+    SMTP_SERVERS: "$HOME_NET"
+    TELNET_SERVERS: "$HOME_NET"
+    SSH_SERVERS: "$HOME_NET"
+    DNP3_SERVER: "$HOME_NET"
+    DNP3_CLIENT: "$HOME_NET"
+    MODBUS_CLIENT: "$HOME_NET"
+    MODBUS_SERVER: "$HOME_NET"
+    ENIP_CLIENT: "$HOME_NET"
+    ENIP_SERVER: "$HOME_NET"
+    AIM_SERVERS: "64.12.24.0/23,64.12.28.0/23,64.12.161.0/24,64.12.163.0/24,64.12.200.0/24,205.188.3.0/24,205.188.9.0/24,205.188.153.0/24,205.188.179.0/24,205.188.248.0/22"
+    DC_SERVERS: "$HOME_NET"
+    DNP3_SERVER: "$HOME_NET"
 
   port-groups:
     HTTP_PORTS: "80"
     HTTPS_PORTS: "443"
     SQL_PORTS: "3306"
+    ORACLE_PORTS: "1521"
+    SSH_PORTS: "22"
+    TELNET_PORTS: "23"
+    DNP3_PORTS: "20000"
+    MODBUS_PORTS: "502"
+
+stats:
+  enabled: yes
+  interval: 8
 
 # ── Capture réseau ───────────────────────────────────────────
 # pcap any = capture sur toutes les interfaces (hôte + bridges Docker br-XXXX)

@@ -4,8 +4,6 @@
 # Doc : https://documentation.wazuh.com/current/deployment-options/docker/
 # ============================================================
 
-version: "3.9"
-
 services:
 
   # ── Wazuh Manager ─────────────────────────────────────────
@@ -35,9 +33,18 @@ services:
       - ./certs/root-ca.pem:/etc/ssl/wazuh-certs/root-ca.pem:ro
       - ./certs/manager.pem:/etc/ssl/wazuh-certs/manager.pem:ro
       - ./certs/manager-key.pem:/etc/ssl/wazuh-certs/manager-key.pem:ro
-      # Logs ModSecurity et Suricata lus directement par le manager
+      # Règles et décodeurs personnalisés
+      - ./local_rules.xml:/var/ossec/etc/rules/local_rules.xml
+      - ./local_decoder.xml:/var/ossec/etc/decoders/local_decoder.xml
+      # Logs lus directement par le manager
       - modsec_logs:/var/log/modsecurity:ro
       - suricata_logs:/var/log/suricata:ro
+      - nginx1_logs:/var/log/nginx1:ro
+      - nginx2_logs:/var/log/nginx2:ro
+      - haproxy1_logs:/var/log/haproxy1:ro
+      - haproxy2_logs:/var/log/haproxy2:ro
+      - mariadb_master_logs:/var/log/mariadb-master:ro
+      - mariadb_slave_logs:/var/log/mariadb-slave:ro
     ports:
       - "1514:1514/udp"   # Agents → Manager (logs)
       - "1515:1515"       # Agents → Manager (enregistrement)
@@ -122,6 +129,24 @@ volumes:
   suricata_logs:
     external: true
     name: tp_opensource_suricata_logs
+  nginx1_logs:
+    external: true
+    name: tp_opensource_nginx1_logs
+  nginx2_logs:
+    external: true
+    name: tp_opensource_nginx2_logs
+  haproxy1_logs:
+    external: true
+    name: tp_opensource_haproxy1_logs
+  haproxy2_logs:
+    external: true
+    name: tp_opensource_haproxy2_logs
+  mariadb_master_logs:
+    external: true
+    name: tp_opensource_mariadb_master_logs
+  mariadb_slave_logs:
+    external: true
+    name: tp_opensource_mariadb_slave_logs
 
 networks:
   management:

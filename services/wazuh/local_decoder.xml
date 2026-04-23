@@ -1,0 +1,47 @@
+<!-- ============================================================
+     Décodeurs personnalisés — SecureStack
+     HAProxy (aucun décodeur intégré dans Wazuh)
+     Note : Wazuh OS_Regex — pas de \[ pour matcher un crochet.
+     Utiliser \S+ pour les tokens non-whitespace.
+     ============================================================ -->
+
+<!-- ── HAProxy : point d'entrée (program_name = haproxy) ─────── -->
+<decoder name="haproxy">
+    <program_name>haproxy</program_name>
+</decoder>
+
+<!--
+  Log HTTP HAProxy (après stripping syslog par le décodeur parent) :
+  172.20.0.10:54321 [23/Apr/2026:10:00:00.000] http_front nginx_back/nginx1 0/0/1/2/3 200 1234 - - ---- ...
+  Prematch : IP:PORT suivi d'un espace (évite \[ non supporté)
+  Regex : IP capturée, timestamp ignoré (\S+), frontend, backend/server, status
+-->
+<decoder name="haproxy-http">
+    <parent>haproxy</parent>
+    <prematch>^\d+\.\d+\.\d+\.\d+:\d+ </prematch>
+    <regex>^(\d+\.\d+\.\d+\.\d+):\d+ \S+ (\S+) (\S+)/(\S+) \S+ (\d+) \d+</regex>
+    <order>srcip,haproxy.frontend,haproxy.backend,haproxy.server,haproxy.http_status</order>
+</decoder>
+
+<!--
+  Changement d'état backend :
+  Server nginx_back/nginx1 is DOWN, reason: ...
+  Server nginx_back/nginx1 is UP, reason: ...
+-->
+<decoder name="haproxy-server-state">
+    <parent>haproxy</parent>
+    <prematch>^Server </prematch>
+    <regex>^Server (\S+)/(\S+) is (\w+)</regex>
+    <order>haproxy.backend,haproxy.server,haproxy.server_state</order>
+</decoder>
+
+<!--
+  Connexion TCP depuis un client :
+  Connect from 1.2.3.4:12345 to 172.21.0.100:80 (http_front/TCP)
+-->
+<decoder name="haproxy-connect">
+    <parent>haproxy</parent>
+    <prematch>^Connect from </prematch>
+    <regex>^Connect from (\d+\.\d+\.\d+\.\d+):\d+ to (\d+\.\d+\.\d+\.\d+):\d+</regex>
+    <order>srcip,dstip</order>
+</decoder>

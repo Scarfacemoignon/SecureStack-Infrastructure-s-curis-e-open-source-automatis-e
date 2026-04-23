@@ -39,8 +39,14 @@ networks:
 volumes:
   mariadb_master_data:
   mariadb_slave_data:
+  mariadb_master_logs:
+  mariadb_slave_logs:
   suricata_logs:
   modsec_logs:
+  nginx1_logs:
+  nginx2_logs:
+  haproxy1_logs:
+  haproxy2_logs:
 
 # ════════════════════════════════════════════════════════════
 # SERVICES
@@ -61,6 +67,7 @@ services:
       MYSQL_DATABASE: appdb
     volumes:
       - mariadb_master_data:/var/lib/mysql
+      - mariadb_master_logs:/var/log/mysql
     networks:
       backend:
         ipv4_address: 172.22.0.20
@@ -90,6 +97,7 @@ services:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
     volumes:
       - mariadb_slave_data:/var/lib/mysql
+      - mariadb_slave_logs:/var/log/mysql
     networks:
       backend:
         ipv4_address: 172.22.0.21
@@ -115,6 +123,8 @@ services:
     depends_on:
       mariadb-master:
         condition: service_healthy
+    volumes:
+      - nginx1_logs:/var/log/nginx
     networks:
       backend:
         ipv4_address: 172.22.0.10
@@ -138,6 +148,8 @@ services:
     depends_on:
       mariadb-master:
         condition: service_healthy
+    volumes:
+      - nginx2_logs:/var/log/nginx
     networks:
       backend:
         ipv4_address: 172.22.0.11
@@ -169,6 +181,8 @@ services:
     environment:
       - KEEPALIVED_STATE=MASTER
       - KEEPALIVED_PRIORITY=100
+    volumes:
+      - haproxy1_logs:/var/log/haproxy
     networks:
       frontend:
         ipv4_address: 172.21.0.10
@@ -200,6 +214,8 @@ services:
       - KEEPALIVED_STATE=BACKUP
       - KEEPALIVED_PRIORITY=90
       # Ces variables peuvent être lues dans keepalived.conf
+    volumes:
+      - haproxy2_logs:/var/log/haproxy
     networks:
       frontend:
         ipv4_address: 172.21.0.11
@@ -220,9 +236,12 @@ services:
     depends_on:
       haproxy1:
         condition: service_started
+    environment:
+      - MODSEC_AUDIT_LOG=/var/log/modsecurity/audit.log
+      - MODSEC_AUDIT_LOG_FORMAT=JSON
+      - MODSEC_AUDIT_ENGINE=RelevantOnly
     volumes:
       - modsec_logs:/var/log/modsecurity
-      # Logs partagés avec l'agent Wazuh
     networks:
       dmz:
         ipv4_address: 172.20.0.10
